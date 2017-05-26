@@ -4,45 +4,30 @@ import (
 	"database/sql"
 )
 
-func createTables() error {
-	statement := `
-		CREATE TABLE comments (
-			url text not null,
-			name text not null,
-			comment text not null,
-			time timestamp not null,
-			parent int
-		);
-	`
-	_, err := db.Exec(statement)
-	return err
-}
+var db *sql.DB
 
-func loadDatabase(dbFile string) error {
+func LoadDatabase(dbFile string) error {
 	var err error
 	db, err = sql.Open("sqlite3", dbFile)
 	if err != nil {
 		return err
 	}
-
 	statement := `
-		SELECT name FROM sqlite_master WHERE type='table' AND name='comments';
+		CREATE TABLE IF NOT EXISTS comments (
+			url varchar(2083) not null,
+			name varchar(200) not null,
+			comment varchar(3000) not null,
+			depth int not null,
+			time timestamp not null,
+			parent int
+		);
 	`
-	rows, err := db.Query(statement)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		if err = createTables(); err != nil {
-			return err
-		}
-	}
+	_, err = db.Exec(statement)
+	return err
 
-	return nil
 }
 
-func cleanupOldComments() error {
+func CleanupOldComments() error {
 	statement := `
 		DELETE FROM comments
 		WHERE time < date('now', '-30 minute');

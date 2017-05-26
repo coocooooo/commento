@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"time"
 )
 
@@ -14,20 +15,34 @@ type Comment struct {
 }
 
 func createComment(url string, name string, comment string, parent int) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-
 	statement := `
-		INSERT INTO comments(url, name, comment, time, parent) VALUES(?, ?, ?, ?, ?);
+		SELECT depth, parent FROM comments WHERE rowid=?;
 	`
-	_, err = db.Exec(statement, url, name, comment, time.Now(), parent)
+	rows, err := db.Query(statement, parent)
 	if err != nil {
 		return err
 	}
+	defer rows.Close()
 
-	return tx.Commit()
+	depth := 0
+
+	for rows.Next() {
+		var pParent int
+		if err := rows.Scan(&depth, &pParent); err == nil {
+			if depth+1 > 5 {
+				parent = pParent
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		log.Println(err)
+	}
+
+	statement = `
+		INSERT INTO comments(url, name, comment, time, depth, parent) VALUES(?, ?, ?, ?, ?, ?);
+	`
+	_, err = db.Exec(statement, url, name, comment, time.Now(), depth+1, parent)
+	return err
 }
 
 func getComments(url string) ([]Comment, error) {
@@ -52,6 +67,9 @@ func getComments(url string) ([]Comment, error) {
 			return nil, err
 		}
 		comments = append(comments, Comment{ID: id, URL: url, Comment: comment, Name: name, Timestamp: timestamp, Parent: parent})
+	}
+	if err := rows.Err(); err != nil {
+		log.Println(err)
 	}
 
 	return comments, nil
